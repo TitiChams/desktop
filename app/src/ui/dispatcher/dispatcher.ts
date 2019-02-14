@@ -69,6 +69,7 @@ import { TipState } from '../../models/tip'
 import { ApplicationTheme } from '../lib/application-theme'
 import { installCLI } from '../lib/install-cli'
 import { executeMenuItem } from '../main-process-proxy'
+import { getTipSha } from '../../lib/tip'
 
 /**
  * An error handler function.
@@ -627,6 +628,41 @@ export class Dispatcher {
     mergeStatus: MergeResultStatus | null
   ): Promise<void> {
     return this.appStore._mergeBranch(repository, branch, mergeStatus)
+  }
+
+  /** aborts the current rebase and refreshes the repository's status */
+  public async abortRebase(repository: Repository) {
+    await this.appStore._abortRebase(repository)
+    await this.appStore._loadStatus(repository)
+  }
+
+  public async continueRebase(
+    repository: Repository,
+    workingDirectory: WorkingDirectoryStatus
+  ) {
+    const stateBefore = this.repositoryStateManager.get(repository)
+
+    const beforeSha = getTipSha(stateBefore.branchesState.tip)
+
+    log.info(`[continueRebase] continuing rebase for ${beforeSha}`)
+
+    const result = await this.appStore._continueRebase(
+      repository,
+      workingDirectory
+    )
+    await this.appStore._loadStatus(repository)
+
+    const stateAfter = this.repositoryStateManager.get(repository)
+    const { tip } = stateAfter.branchesState
+    const afterSha = getTipSha(tip)
+
+    log.info(
+      `[continueRebase] completed rebase - got ${result} and on tip ${afterSha} - kind ${
+        tip.kind
+      }`
+    )
+
+    return result
   }
 
   /** aborts an in-flight merge and refreshes the repository's status */
